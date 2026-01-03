@@ -11,18 +11,14 @@ public:
     // Constructor
     ServoStepper(
         uint8_t servoPin,
-        int minSteps,
-        int maxSteps,
         int servoMinDeg = 0,
         int servoMaxDeg = 180
     )
         : _pin(servoPin),
-          _minSteps(minSteps),
-          _maxSteps(maxSteps),
           _servoMin(servoMinDeg),
           _servoMax(servoMaxDeg)
     {
-        _currentStep = constrain(0, _minSteps, _maxSteps);
+        _currentAnglePerc = 0;
     }
 
     void begin() {
@@ -31,51 +27,46 @@ public:
     }
 
     // Step like a stepper motor
-    void step(bool dir, int steps = 1) {
-        endstopPlus  = false;
-        endstopMinus = false;
+    void step(bool dir, float deltaPercent = 0.005) {
 
         if (dir) {
-            if (_currentStep < _maxSteps) {
-                _currentStep+=steps;
+            if (_currentAnglePerc < 1.0) {
+                _currentAnglePerc+=deltaPercent;
             }
         } else {
-            if (_currentStep > _minSteps) {
-                _currentStep-=steps;
+            if (_currentAnglePerc > 0.0) {
+                _currentAnglePerc-=deltaPercent;
             }
         }
-
-        _currentStep = constrain(_currentStep, _minSteps, _maxSteps);
-        endstopPlus = _currentStep >= _maxSteps;
-        endstopMinus = _currentStep <= _minSteps;
         
         updateServo();
-    }
-
-    int getCurrentStep() const {
-        return _currentStep;
     }
 
 private:
     Servo _servo;
     uint8_t _pin;
 
-    int _currentStep;
-    int _minSteps;
-    int _maxSteps;
-
     int _servoMin;
     int _servoMax;
+    float _currentAnglePerc;
 
     void updateServo() {
-        int angle = map(
-            _currentStep,
-            _minSteps,
-            _maxSteps,
+      
+        _currentAnglePerc = _currentAnglePerc < 0.0 ? 0.0 : _currentAnglePerc;
+        _currentAnglePerc = _currentAnglePerc > 1.0 ? 1.0 : _currentAnglePerc;
+        
+        endstopPlus = _currentAnglePerc > 0.999;
+        endstopMinus = _currentAnglePerc < 0.001;
+
+        int currentAngleDeg = map(
+            _currentAnglePerc * 10000,
+            0 * 10000,
+            1 * 10000,
             _servoMin,
             _servoMax
         );
-        _servo.write(angle);
+        
+        _servo.write(currentAngleDeg);
     }
 };
 
