@@ -2,6 +2,34 @@
 #include <Servo.h>
 
 
+int linearMapPercentage(float percent, int servoMinDeg, int servoMaxDeg) {
+    return map(
+        percent * 10000,
+        0 * 10000,
+        1 * 10000,
+        servoMinDeg,
+        servoMaxDeg
+    );
+  
+}
+
+
+int scotchYokeMapPercentage(float percent, int servoMinDeg, int servoMaxDeg) {
+
+    // Inverse Scotch yoke: linear position -> crank angle
+    // θ in range [-π/2, +π/2]
+    float theta = asin(2.0f * percent - 1.0f);
+
+    // Normalize angle to [0.0, 1.0]
+    float angleNorm = (theta + (PI / 2.0f)) / PI;
+
+    // Map normalized angle to servo degrees
+    return servoMinDeg +
+           (int)((servoMaxDeg - servoMinDeg) * angleNorm);
+  
+}
+
+
 class ServoStepper {
 public:
     // Public endstop indicators
@@ -11,12 +39,16 @@ public:
     // Constructor
     ServoStepper(
         uint8_t servoPin,
+        int (*mappingStrategyFn)(float, int, int),
         int servoMinDeg = 0,
-        int servoMaxDeg = 180
+        int servoMaxDeg = 180,
+        float defaultStepPerc = 0.005
     )
         : _pin(servoPin),
+          _mappingStrategy(mappingStrategyFn),
           _servoMin(servoMinDeg),
-          _servoMax(servoMaxDeg)
+          _servoMax(servoMaxDeg),
+          _defaultStepPercent(defaultStepPerc)
     {
         _currentAnglePerc = 0;
     }
@@ -25,9 +57,13 @@ public:
         _servo.attach(_pin);
         step(false, 0);
     }
-
+    
+    void step(bool dir) {
+        step(dir, _defaultStepPercent);
+    }
+  
     // Step like a stepper motor
-    void step(bool dir, float deltaPercent = 0.005) {
+    void step(bool dir, float deltaPercent) {
 
         if (dir) {
             if (_currentAnglePerc < 1.0) {
@@ -48,7 +84,9 @@ private:
 
     int _servoMin;
     int _servoMax;
+    float _defaultStepPercent;
     float _currentAnglePerc;
+    int (*_mappingStrategy)(float, int, int);
 
     void updateServo() {
       
@@ -58,10 +96,8 @@ private:
         endstopPlus = _currentAnglePerc > 0.999;
         endstopMinus = _currentAnglePerc < 0.001;
 
-        int currentAngleDeg = map(
-            _currentAnglePerc * 10000,
-            0 * 10000,
-            1 * 10000,
+        int currentAngleDeg = (*_mappingStrategy)(
+            _currentAnglePerc,
             _servoMin,
             _servoMax
         );
@@ -71,8 +107,6 @@ private:
 };
 
 //////////////////////////////////////////////
-
-#define MOTORS_ENABLE_PIN 2
 
 #define CHAN_0_STEP_PIN 3
 #define CHAN_0_DIR_PIN 4
@@ -87,16 +121,25 @@ private:
 #define CHAN_1_SERVO_OUT_PIN 10
 
 
-ServoStepper chanAServo(CHAN_0_SERVO_OUT_PIN, 0, 180);
-ServoStepper chanBServo(CHAN_1_SERVO_OUT_PIN, 0, 180);
+ServoStepper chanAServo(
+    CHAN_0_SERVO_OUT_PIN,
+    scotchYokeMapPercentage, //linearMapPercentage,
+    0, 160,
+    0.05
+);
+
+ServoStepper chanBServo(
+    CHAN_1_SERVO_OUT_PIN,
+    scotchYokeMapPercentage, //linearMapPercentage,
+    0, 180
+);
+
 bool lastStepStateA = false;
 bool lastStepStateB = false;
 
 void setup() {
     chanAServo.begin();
     chanBServo.begin();
-
-    pinMode(MOTORS_ENABLE_PIN, INPUT_PULLUP);
     
     pinMode(CHAN_0_STEP_PIN, INPUT);
     pinMode(CHAN_0_DIR_PIN, INPUT);
@@ -109,27 +152,34 @@ void setup() {
 }
 
 
+bool DEBUGmoveDir = true;
+
 void loop() {
 
-    if (digitalRead(MOTORS_ENABLE_PIN)) {
         
-        // if step rising edge
-        bool stepPinState = digitalRead(CHAN_0_STEP_PIN);
-        if (lastStepStateA == false && stepPinState == true) {
-          lastStepStateA = true;
-          chanAServo.step(digitalRead(CHAN_0_DIR_PIN));
-        }
-        if (!stepPinState) lastStepStateA = false;
-        
-        // same for channel B
-        stepPinState = digitalRead(CHAN_1_STEP_PIN);
-        if (lastStepStateB == false && stepPinState == true) {
-          lastStepStateB = true;
-          chanBServo.step(digitalRead(CHAN_1_DIR_PIN));
-        }
-        if (!stepPinState) lastStepStateB = false;
-      
+    // if step rising edge
+    bool stepPinState = digitalRead(CHAN_0_STEP_PIN);
+
+    // FIXME FOR TESTING ONLY GEORGI
+    chanAServo.step(DEBUGmoveDir);
+    if (chanAServo.endstopMinus) { DEBUGmoveDir = true; delay(1000); }
+    if (chanAServo.endstopPlus) { DEBUGmoveDir = false; delay(1000); }
+    delay(400);
+    
+    if (lastStepStateA == false && stepPinState == true) {
+      lastStepStateA = true;
+      chanAServo.step(digitalRead(CHAN_0_DIR_PIN));
     }
+    if (!stepPinState) lastStepStateA = false;
+    
+    // same for channel B
+    stepPinState = digitalRead(CHAN_1_STEP_PIN);
+    if (lastStepStateB == false && stepPinState == true) {
+      lastStepStateB = true;
+      chanBServo.step(digitalRead(CHAN_1_DIR_PIN));
+    }
+    if (!stepPinState) lastStepStateB = false;
+      
 
     
     digitalWrite(CHAN_0_ENDSTOP_PIN, chanAServo.endstopMinus);
