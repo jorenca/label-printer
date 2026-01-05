@@ -15,17 +15,25 @@ int linearMapPercentage(float percent, int servoMinDeg, int servoMaxDeg) {
 
 
 int scotchYokeMapPercentage(float percent, int servoMinDeg, int servoMaxDeg) {
+    
+//    float minTheta = servoMinDeg * PI / 180.0 - (PI / 2.0f); 
+//    float maxTheta = servoMaxDeg * PI / 180.0 - (PI / 2.0f);
+//    float minDist = sin(minTheta);
+//    float maxDist = sin(maxTheta);
+//    float totalTravel = maxDist - minDist;
+//    float travelDist = minDist + percent * totalTravel;
 
-    // Inverse Scotch yoke: linear position -> crank angle
+        // Inverse Scotch yoke: linear position -> crank angle
     // θ in range [-π/2, +π/2]
     float theta = asin(2.0f * percent - 1.0f);
 
     // Normalize angle to [0.0, 1.0]
     float angleNorm = (theta + (PI / 2.0f)) / PI;
 
-    // Map normalized angle to servo degrees
-    return servoMinDeg +
-           (int)((servoMaxDeg - servoMinDeg) * angleNorm);
+    // Map angle to servo degrees
+    // Assuming min and max servo degrees correspond to bottom and top positions
+    return linearMapPercentage(angleNorm, servoMinDeg, servoMaxDeg);
+    //return (theta + (PI / 2.0f)) * 180.0 / PI;
   
 }
 
@@ -93,8 +101,8 @@ private:
         _currentAnglePerc = _currentAnglePerc < 0.0 ? 0.0 : _currentAnglePerc;
         _currentAnglePerc = _currentAnglePerc > 1.0 ? 1.0 : _currentAnglePerc;
         
-        endstopPlus = _currentAnglePerc > 0.999;
-        endstopMinus = _currentAnglePerc < 0.001;
+        endstopPlus = _currentAnglePerc > 0.99;
+        endstopMinus = _currentAnglePerc < 0.01;
 
         int currentAngleDeg = (*_mappingStrategy)(
             _currentAnglePerc,
@@ -108,15 +116,15 @@ private:
 
 //////////////////////////////////////////////
 
-#define CHAN_0_STEP_PIN 3
-#define CHAN_0_DIR_PIN 4
-#define CHAN_0_ENDSTOP_PIN 5
+#define CHAN_0_STEP_PIN 8
+#define CHAN_0_DIR_PIN 6
+#define CHAN_0_ENDSTOP_PIN 3
 
 #define CHAN_0_SERVO_OUT_PIN 9
 
-#define CHAN_1_STEP_PIN 6
-#define CHAN_1_DIR_PIN 7
-#define CHAN_1_ENDSTOP_PIN 8
+#define CHAN_1_STEP_PIN 7
+#define CHAN_1_DIR_PIN 5
+#define CHAN_1_ENDSTOP_PIN 2
 
 #define CHAN_1_SERVO_OUT_PIN 10
 
@@ -124,14 +132,15 @@ private:
 ServoStepper chanAServo(
     CHAN_0_SERVO_OUT_PIN,
     scotchYokeMapPercentage, //linearMapPercentage,
-    0, 160,
-    0.05
+    0, 180,
+    1.0 / 200.0
 );
 
 ServoStepper chanBServo(
     CHAN_1_SERVO_OUT_PIN,
-    scotchYokeMapPercentage, //linearMapPercentage,
-    0, 180
+    linearMapPercentage,
+    150, 60,
+    1.0 / 100.0
 );
 
 bool lastStepStateA = false;
@@ -161,10 +170,10 @@ void loop() {
     bool stepPinState = digitalRead(CHAN_0_STEP_PIN);
 
     // FIXME FOR TESTING ONLY GEORGI
-    chanAServo.step(DEBUGmoveDir);
-    if (chanAServo.endstopMinus) { DEBUGmoveDir = true; delay(1000); }
-    if (chanAServo.endstopPlus) { DEBUGmoveDir = false; delay(1000); }
-    delay(400);
+//    chanBServo.step(DEBUGmoveDir);
+//    if (chanBServo.endstopMinus) { DEBUGmoveDir = true; delay(1000); }
+//    if (chanBServo.endstopPlus) { DEBUGmoveDir = false; delay(1000); }
+//    delay(200);
     
     if (lastStepStateA == false && stepPinState == true) {
       lastStepStateA = true;

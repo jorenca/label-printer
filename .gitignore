@@ -1,4 +1,5 @@
 .idea/**
+text2gcode
 
 **/*.pdsprj
 **/*.pdsprj**
