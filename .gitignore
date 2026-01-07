@@ -1,6 +1,6 @@
 .idea/**
-text2gcode
 
 **/*.pdsprj
 **/*.pdsprj**
 **/Project Backups/**
+**/.ipynb_checkpoints/**
