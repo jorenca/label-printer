@@ -38,7 +38,7 @@ You will need:
 * 8mm linear bearings (2 pcs, `SCS8UU` part)
 * 8mm skateboard bearings (4 pcs)
 * M3 screws up to 30mm, nuts, washers, etc.
-* A couple of M4 and M8 bolts
+* A couple of M4 and M8 bolts, a couple of springs
 
 
 ### Flashing `GRBL`
@@ -46,6 +46,9 @@ Check out the latest version of `GRBL`.
 Use the config file provided in `grbl/config.h` to replace/merge with the `GRBL` one.
 Compile and flash on an Arduino Nano.
 
+#### `GRBL` settings
+Apply the `GRBL` settings (steps per mm for each axis, etc.)
+listed in `grbl/settings.txt` after flashing the firmware.
 
 ### Flashing the `stepper-to-servo` firmware
 Open the `stepper-to-servo` Arduino project and compile.
