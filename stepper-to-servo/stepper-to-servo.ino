@@ -2,6 +2,9 @@
 #include <Servo.h>
 
 
+
+
+
 int linearMapPercentage(float percent, int servoMinDeg, int servoMaxDeg) {
     return map(
         percent * 10000,
@@ -50,40 +53,35 @@ public:
         int (*mappingStrategyFn)(float, int, int),
         int servoMinDeg = 0,
         int servoMaxDeg = 180,
-        float defaultStepPerc = 0.005
+        int totalSteps = 100
     )
         : _pin(servoPin),
           _mappingStrategy(mappingStrategyFn),
           _servoMin(servoMinDeg),
           _servoMax(servoMaxDeg),
-          _defaultStepPercent(defaultStepPerc)
+          _totalSteps(totalSteps)
     {
-        _currentAnglePerc = 0;
     }
 
     void begin() {
         _servo.attach(_pin);
-        step(false, 0);
+        step(0);
     }
-    
-    void step(bool dir) {
-        step(dir, _defaultStepPercent);
-    }
-  
-    // Step like a stepper motor
-    void step(bool dir, float deltaPercent) {
 
-        if (dir) {
-            if (_currentAnglePerc < 1.0) {
-                _currentAnglePerc+=deltaPercent;
-            }
-        } else {
-            if (_currentAnglePerc > 0.0) {
-                _currentAnglePerc-=deltaPercent;
-            }
-        }
+    void step(int32_t stepsCount) {
+
+        float percent = (float)stepsCount / (float)_totalSteps;
         
-        updateServo();
+        endstopPlus = stepsCount >= _totalSteps;
+        endstopMinus = stepsCount <= 0;
+
+        int currentAngleDeg = (*_mappingStrategy)(
+            percent,
+            _servoMin,
+            _servoMax
+        );
+        
+        _servo.write(currentAngleDeg);
     }
 
 private:
@@ -92,106 +90,111 @@ private:
 
     int _servoMin;
     int _servoMax;
-    float _defaultStepPercent;
-    float _currentAnglePerc;
+    int _totalSteps;
     int (*_mappingStrategy)(float, int, int);
 
-    void updateServo() {
-      
-        _currentAnglePerc = _currentAnglePerc < 0.0 ? 0.0 : _currentAnglePerc;
-        _currentAnglePerc = _currentAnglePerc > 1.0 ? 1.0 : _currentAnglePerc;
-        
-        endstopPlus = _currentAnglePerc > 0.99;
-        endstopMinus = _currentAnglePerc < 0.01;
-
-        int currentAngleDeg = (*_mappingStrategy)(
-            _currentAnglePerc,
-            _servoMin,
-            _servoMax
-        );
-        
-        _servo.write(currentAngleDeg);
-    }
 };
 
 //////////////////////////////////////////////
 
-#define CHAN_0_STEP_PIN 8
-#define CHAN_0_DIR_PIN 6
-#define CHAN_0_ENDSTOP_PIN 3
+#define CHAN_0_STEP_PIN 3  // needs interrupt pin
+#define CHAN_0_DDR DDRD
+#define CHAN_0_DIR_PORT PIND
+#define CHAN_0_DIR_PIN PD6
+#define CHAN_0_ENDSTOP_PIN 8
 
 #define CHAN_0_SERVO_OUT_PIN 9
 
-#define CHAN_1_STEP_PIN 7
-#define CHAN_1_DIR_PIN 5
-#define CHAN_1_ENDSTOP_PIN 2
+#define CHAN_1_STEP_PIN 2  // needs interrupt pin
+#define CHAN_1_DDR DDRD
+#define CHAN_1_DIR_PORT PIND
+#define CHAN_1_DIR_PIN PD5
+#define CHAN_1_ENDSTOP_PIN 7
 
 #define CHAN_1_SERVO_OUT_PIN 10
+
+#define CHAN_0_TOTAL_STEPS 460
+#define CHAN_1_TOTAL_STEPS 100
+
+volatile int32_t stepCountA = 0;
+volatile int32_t stepCountB = 0;
+
+void ISR_stepA() {
+    // digitalRead is too slow?
+    //bool dir = digitalRead(CHAN_0_DIR_PIN);
+    bool dir = CHAN_0_DIR_PORT & _BV(CHAN_0_DIR_PIN);
+    
+    //constrain() is not ISR-safe (it’s a macro with comparisons).
+    //stepCountA = constrain(stepCountA, 0, CHAN_0_TOTAL_STEPS);
+    if (dir) {
+        if (stepCountA < CHAN_0_TOTAL_STEPS) stepCountA++;
+    } else {
+        if (stepCountA > 0) stepCountA--;
+    }
+}
+
+void ISR_stepB() {
+    // digitalRead is too slow?
+    //bool dir = digitalRead(CHAN_1_DIR_PIN);
+    bool dir = CHAN_1_DIR_PORT & _BV(CHAN_1_DIR_PIN);
+
+    
+    //constrain() is not ISR-safe (it’s a macro with comparisons).
+    //stepCountB = constrain(stepCountB, 0, CHAN_1_TOTAL_STEPS);
+    if (dir) {
+        if (stepCountB < CHAN_1_TOTAL_STEPS) stepCountB++;
+    } else {
+        if (stepCountB > 0) stepCountB--;
+    }
+}
 
 
 ServoStepper chanAServo(
     CHAN_0_SERVO_OUT_PIN,
     scotchYokeMapPercentage, //linearMapPercentage,
     0, 180,
-    1.0 / 200.0
+    CHAN_0_TOTAL_STEPS
 );
 
 ServoStepper chanBServo(
     CHAN_1_SERVO_OUT_PIN,
     linearMapPercentage,
     150, 60,
-    1.0 / 100.0
+    CHAN_1_TOTAL_STEPS
 );
 
-bool lastStepStateA = false;
-bool lastStepStateB = false;
 
 void setup() {
-    chanAServo.begin();
-    chanBServo.begin();
     
     pinMode(CHAN_0_STEP_PIN, INPUT);
-    pinMode(CHAN_0_DIR_PIN, INPUT);
     pinMode(CHAN_1_STEP_PIN, INPUT);
-    pinMode(CHAN_1_DIR_PIN, INPUT);
 
+    attachInterrupt(digitalPinToInterrupt(CHAN_0_STEP_PIN), ISR_stepA, RISING);
+    attachInterrupt(digitalPinToInterrupt(CHAN_1_STEP_PIN), ISR_stepB, RISING);
+    
+    CHAN_0_DDR &= ~_BV(CHAN_0_DIR_PIN);   // clear bit → INPUT
+    CHAN_1_DDR &= ~_BV(CHAN_1_DIR_PIN);   // clear bit → INPUT
     
     pinMode(CHAN_0_ENDSTOP_PIN, OUTPUT);
     pinMode(CHAN_1_ENDSTOP_PIN, OUTPUT);
+    
+    chanAServo.begin();
+    chanBServo.begin();
 }
 
 
-bool DEBUGmoveDir = true;
-
 void loop() {
 
-        
-    // if step rising edge
-    bool stepPinState = digitalRead(CHAN_0_STEP_PIN);
-
-    // FIXME FOR TESTING ONLY GEORGI
-//    chanBServo.step(DEBUGmoveDir);
-//    if (chanBServo.endstopMinus) { DEBUGmoveDir = true; delay(1000); }
-//    if (chanBServo.endstopPlus) { DEBUGmoveDir = false; delay(1000); }
-//    delay(200);
+    noInterrupts();
+    int32_t stepsA = stepCountA;
+    int32_t stepsB = stepCountB;
+    interrupts();
     
-    if (lastStepStateA == false && stepPinState == true) {
-      lastStepStateA = true;
-      chanAServo.step(digitalRead(CHAN_0_DIR_PIN));
-    }
-    if (!stepPinState) lastStepStateA = false;
+    chanAServo.step(stepsA);
+    chanBServo.step(stepsB);
     
-    // same for channel B
-    stepPinState = digitalRead(CHAN_1_STEP_PIN);
-    if (lastStepStateB == false && stepPinState == true) {
-      lastStepStateB = true;
-      chanBServo.step(digitalRead(CHAN_1_DIR_PIN));
-    }
-    if (!stepPinState) lastStepStateB = false;
-      
-
-    
-    digitalWrite(CHAN_0_ENDSTOP_PIN, chanAServo.endstopMinus);
-    digitalWrite(CHAN_1_ENDSTOP_PIN, chanBServo.endstopMinus);
+    digitalWrite(CHAN_0_ENDSTOP_PIN, chanAServo.endstopMinus || chanAServo.endstopPlus);
+    digitalWrite(CHAN_1_ENDSTOP_PIN, chanBServo.endstopMinus || chanBServo.endstopPlus);
+    delay(20);
 
 }
