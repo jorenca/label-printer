@@ -25,6 +25,22 @@ GCODE sender app of choice.
 
 ## Build
 
+You will need:
+* Arduino Nano
+* Atmega8
+* A4988 driver
+* Nema17 motor (for X axis)
+* MG996R servo (for Y axis)
+* MG90s servo (for Z axis)
+* 12-24V / 4A DC power supply
+* 5V buck converter (for servo powering)
+* 8mm linear rails (2 pcs, ~15cm each)
+* 8mm linear bearings (2 pcs, `SCS8UU` part)
+* 8mm skateboard bearings (4 pcs)
+* M3 screws up to 30mm, nuts, washers, etc.
+* A couple of M4 and M8 bolts
+
+
 ### Flashing `GRBL`
 Check out the latest version of `GRBL`.
 Use the config file provided in `grbl/config.h` to replace/merge with the `GRBL` one.
@@ -47,3 +63,11 @@ Attach your programmer to the Atmega8 and from the `avrdude` folder, run:
 ### Schematic / wiring
 
 ![Schematic](./schematic.png)
+
+
+### 3D Models
+
+All `.stl` files are available in the `stls` directory.
+
+![Rendering 1](./render-1.png)
+![Rendering 2](./render-2.png)
