@@ -4,3 +4,5 @@
 **/*.pdsprj**
 **/Project Backups/**
 **/.ipynb_checkpoints/**
+__pycache__
+*.nc
